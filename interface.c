@@ -4333,6 +4333,11 @@ void print_message (struct in_ev *ev, struct tgl_message *M) {
       mpop_color (ev);
       mprintf (ev, " ");
       print_user_name (ev, M->from_id, tgl_peer_get (TLS, M->from_id));
+
+      //vlogprintf (E_DEBUG, "reply_id=%d, disable=%d\n", reply_id, disable_msg_preview);
+      tgl_do_send_message (TLS, M->from_id, "test", TGL_SEND_MSG_FLAG_REPLY(M->from_id) | disable_msg_preview | do_html, NULL, print_msg_success_gw, ev);
+
+
       mpush_color (ev, COLOR_BLUE);
       if (M->flags & TGLMF_UNREAD) {
         mprintf (ev, " >>> ");
