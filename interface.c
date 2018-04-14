@@ -102,6 +102,7 @@ struct username_peer_pair {
   tgl_peer_t *peer;
 };
 
+int msg_sent = 0;
 #define username_peer_pair_cmp(a,b) strcmp (a->username, b->username)
 DEFINE_TREE (username_peer_pair, struct username_peer_pair *, username_peer_pair_cmp, NULL)
 struct tree_username_peer_pair *username_peer_pair;
@@ -110,7 +111,8 @@ struct username_peer_pair *current_map;
 
 #define ALLOW_MULT 1
 char *default_prompt = "> ";
-
+struct arg arg_bot;
+struct arg arg_bot_str;
 extern int read_one_string;
 extern char one_string[];
 extern int one_string_len;
@@ -829,7 +831,7 @@ void do_version (struct command *command, int arg_num, struct arg args[], struct
 
 #define ARG2STR_DEF(n,def) args[n].str ? args[n].str : def, args[n].str ? strlen (args[n].str) : strlen (def)
 #define ARG2STR(n) args[n].str, args[n].str ? strlen (args[n].str) : 0
-
+#define ARG2STR_BOT(n) arg_bot_str.str, arg_bot_str.str ? strlen (arg_bot_str.str) : 0
 /* {{{ WORK WITH ACCOUNT */
 
 void do_set_password (struct command *command, int arg_num, struct arg args[], struct in_ev *ev) {
@@ -842,6 +844,16 @@ void do_set_password (struct command *command, int arg_num, struct arg args[], s
 /* {{{ SENDING MESSAGES */
 
 void do_msg (struct command *command, int arg_num, struct arg args[], struct in_ev *ev) {
+  assert (arg_num == 2);
+  if (ev) { ev->refcnt ++; }
+  vlogprintf (E_DEBUG, "reply_id=%d, disable=%d\n", reply_id, disable_msg_preview);
+  arg_bot = args[0];
+  arg_bot_str = args[1];
+  msg_sent = 1;
+  tgl_do_send_message (TLS, args[0].peer_id, ARG2STR(1), TGL_SEND_MSG_FLAG_REPLY(reply_id) | disable_msg_preview | do_html, NULL, print_msg_success_gw, ev);
+}
+
+void do_auto_reply (struct command *command, int arg_num, struct arg args[], struct in_ev *ev) {
   assert (arg_num == 2);
   if (ev) { ev->refcnt ++; }
   vlogprintf (E_DEBUG, "reply_id=%d, disable=%d\n", reply_id, disable_msg_preview);
@@ -4333,10 +4345,38 @@ void print_message (struct in_ev *ev, struct tgl_message *M) {
       mpop_color (ev);
       mprintf (ev, " ");
       print_user_name (ev, M->from_id, tgl_peer_get (TLS, M->from_id));
+      
+      char* received = M->message;
+      int i;
+      for(i = 0; received[i]; i++){
+	        received[i] = tolower(received[i]);
+      }
 
-      //vlogprintf (E_DEBUG, "reply_id=%d, disable=%d\n", reply_id, disable_msg_preview);
-      tgl_do_send_message (TLS, M->from_id, "test", TGL_SEND_MSG_FLAG_REPLY(M->from_id) | disable_msg_preview | do_html, NULL, print_msg_success_gw, ev);
+      if(msg_sent == 1) {
+	char* msg;
+      	if((strstr(received, "boa noite") != NULL) || (strstr(received, "boa noite") != NULL))
+	    msg = "boa noite";
+      	else if((strstr(received, "bom dia") != NULL) || (strstr(received, "Bom dia") != NULL))
+	    msg = "bom dia";
+      	else if((strstr(received, "fazendo o que") != NULL) || (strstr(received, "fazendo o q") != NULL))
+	    msg = "trabalho."; //add array of stuff
 
+	else if((strstr(received, "tudo bem ?") != NULL) || (strstr(received, "tudo bem?") != NULL))
+	    msg = "sim";
+	else if((strstr(received, "como vai ?") != NULL) || (strstr(received, "como vai?") != NULL))
+	    msg = "bem";
+
+
+	//must be last
+	else if((strstr(received, "oi") != NULL) || (strstr(received, "oi ") != NULL))
+	    msg = "oi";
+
+	else
+	    msg = "ok";	
+        sleep(5);
+        arg_bot_str.str = msg;
+        tgl_do_send_message (TLS, arg_bot.peer_id, ARG2STR_BOT(1), 0 | disable_msg_preview | do_html, NULL, print_msg_success_gw, ev);
+      }
 
       mpush_color (ev, COLOR_BLUE);
       if (M->flags & TGLMF_UNREAD) {
@@ -4345,6 +4385,7 @@ void print_message (struct in_ev *ev, struct tgl_message *M) {
         mprintf (ev, " »»» ");
       }
     }
+    
   } else if (tgl_get_peer_type (M->to_id) == TGL_PEER_ENCR_CHAT) {
     tgl_peer_t *P = tgl_peer_get (TLS, M->to_id);
     assert (P);
@@ -4357,6 +4398,7 @@ void print_message (struct in_ev *ev, struct tgl_message *M) {
       mpush_color (ev, COLOR_CYAN);
       mprintf (ev, " %s", P->print_name);
       mpop_color (ev);
+
       if (M->flags & TGLMF_UNREAD) {
         mprintf (ev, " <<< ");
       } else {
@@ -4376,6 +4418,7 @@ void print_message (struct in_ev *ev, struct tgl_message *M) {
         mprintf (ev, " »»» ");
       }
     }
+
   } else if (tgl_get_peer_type (M->to_id) == TGL_PEER_CHAT) {
     mpush_color (ev, COLOR_MAGENTA);
     print_msg_id (ev, M->permanent_id, M);
@@ -4454,6 +4497,7 @@ void print_message (struct in_ev *ev, struct tgl_message *M) {
   mpop_color (ev);
   assert (!color_stack_pos);
   mprintf (ev, "\n");
+ 
   //print_end();
 }
 
